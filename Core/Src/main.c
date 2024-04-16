@@ -65,7 +65,43 @@ static void MX_TIM3_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void move(uint16_t speed) {
+	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_1, speed);
+	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, speed);
+	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, speed);
+	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_4, speed);
+}
 
+void stop() {
+	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_1, 0);
+	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, 0);
+	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, 0);
+	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_4, 0);
+}
+
+void turn_forward() {
+	HAL_GPIO_WritePin(F_IN1_GPIO_Port, F_IN1_Pin, 1);
+	HAL_GPIO_WritePin(F_IN2_GPIO_Port, F_IN2_Pin, 0);
+	HAL_GPIO_WritePin(F_IN3_GPIO_Port, F_IN3_Pin, 1);
+	HAL_GPIO_WritePin(F_IN4_GPIO_Port, F_IN4_Pin, 0);
+
+	HAL_GPIO_WritePin(R_IN1_GPIO_Port, R_IN1_Pin, 1);
+	HAL_GPIO_WritePin(R_IN2_GPIO_Port, R_IN2_Pin, 0);
+	HAL_GPIO_WritePin(R_IN3_GPIO_Port, R_IN3_Pin, 1);
+	HAL_GPIO_WritePin(R_IN4_GPIO_Port, R_IN4_Pin, 0);
+}
+
+void turn_backwards() {
+	HAL_GPIO_WritePin(F_IN1_GPIO_Port, F_IN1_Pin, 0);
+	HAL_GPIO_WritePin(F_IN2_GPIO_Port, F_IN2_Pin, 1);
+	HAL_GPIO_WritePin(F_IN3_GPIO_Port, F_IN3_Pin, 0);
+	HAL_GPIO_WritePin(F_IN4_GPIO_Port, F_IN4_Pin, 1);
+
+	HAL_GPIO_WritePin(R_IN1_GPIO_Port, R_IN1_Pin, 0);
+	HAL_GPIO_WritePin(R_IN2_GPIO_Port, R_IN2_Pin, 1);
+	HAL_GPIO_WritePin(R_IN3_GPIO_Port, R_IN3_Pin, 0);
+	HAL_GPIO_WritePin(R_IN4_GPIO_Port, R_IN4_Pin, 1);
+}
 /* USER CODE END 0 */
 
 /**
@@ -103,7 +139,18 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
 
+  turn_forward();
+  move(200);
+  HAL_Delay(2500);
+  stop();
+  turn_backwards();
+  move(200);
+  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -345,9 +392,9 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 0;
+  htim4.Init.Prescaler = 83;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 65535;
+  htim4.Init.Period = 499;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
