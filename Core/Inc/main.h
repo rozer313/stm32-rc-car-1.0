@@ -75,10 +75,16 @@ void Error_Handler(void);
 #define F_IN2_GPIO_Port GPIOA
 #define LD2_Pin GPIO_PIN_5
 #define LD2_GPIO_Port GPIOA
+#define SERWO_Pin GPIO_PIN_7
+#define SERWO_GPIO_Port GPIOA
 #define F_IN3_Pin GPIO_PIN_0
 #define F_IN3_GPIO_Port GPIOB
+#define TRIG_Pin GPIO_PIN_10
+#define TRIG_GPIO_Port GPIOB
 #define R_IN4_Pin GPIO_PIN_7
 #define R_IN4_GPIO_Port GPIOC
+#define ECHO_Pin GPIO_PIN_8
+#define ECHO_GPIO_Port GPIOA
 #define TMS_Pin GPIO_PIN_13
 #define TMS_GPIO_Port GPIOA
 #define TCK_Pin GPIO_PIN_14
