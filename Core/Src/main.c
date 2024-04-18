@@ -75,6 +75,11 @@ static void MX_TIM3_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+uint32_t convert_to_cm(uint32_t distance_us)
+{
+	return (distance_us / 58);
+}
+
 /* HC-SR-04 AND SERVO */
 uint32_t median_filter(uint32_t *array) {
 	uint32_t temp;
@@ -98,14 +103,21 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
 		uint32_t echo_value;
 		echo_value = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-		captured_distances[number_of_measurements++] = convert_to_cm(echo_value);
+		echo_value = convert_to_cm(echo_value);
+		captured_distances[number_of_measurements++] = echo_value;
+		if (echo_value <= 20) {
+			move(220);
+		}
+			signal_stop = 1;
 		if(number_of_measurements > 4 && continue_measuring) {
 			distance_cm = median_filter(captured_distances);
+			if (distance_cm > 20)
+				signal_stop = 0;
 			number_of_measurements = 0;
 			size = sprintf(buffer, "value=%lu\n\r", distance_cm);
 			if (!signal_stop)
 				HAL_UART_Transmit(&huart2, (uint8_t*)&buffer, size, 500);
-			if (distance_cm <= 5) {
+			if (distance_cm <= 20) {
 				//continue_measuring = 0;
 				signal_stop = 1;
 				HAL_UART_Transmit(&huart2, "STOP\n\r", 6, 500);
@@ -261,12 +273,24 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   HAL_Delay(1000);
   uint8_t check_left = 1;
+  uint8_t signal_start = 0;
   uint32_t mean_value_left = 0;
   uint32_t mean_value_right = 0;
   uint32_t last_measured_value = 0;
   uint16_t measures_while_scanning = 0;
-  servo_center();
+  //servo_scan_left();
+  __HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_2, 1500);
+  //HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+  while (1==1) {
+	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+	  HAL_Delay(1000);
+  }
+
   HAL_Delay(1000);
+
+
+  HAL_UART_Transmit(&huart2, "LEFT\n\r", 6, 500); //go left
+  //servo_center();
 
   /* USER CODE END 2 */
 
@@ -274,7 +298,13 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if (signal_stop) {
+	  if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) {
+		  signal_start = 1;
+		  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+	  }
+
+
+	  if (signal_stop && signal_start) {
 		  stop();
 		  if (check_left == 1) {
 			  if (servo_angle_ms < 2500) {
@@ -341,7 +371,7 @@ int main(void)
 
 	  }
 
-	  else {
+	  else if (signal_start){
 		  turn_forward();
 		  move(power);
 	  }
@@ -412,9 +442,9 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 16;
-  RCC_OscInitStruct.PLL.PLLN = 336;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 80;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -456,7 +486,7 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 0;
+  htim1.Init.Prescaler = 79;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim1.Init.Period = 65535;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -520,9 +550,9 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
+  htim2.Init.Prescaler = 79;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
+  htim2.Init.Period = 62499;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
@@ -536,7 +566,7 @@ static void MX_TIM2_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 10;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
@@ -569,9 +599,9 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
+  htim3.Init.Prescaler = 79;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 65535;
+  htim3.Init.Period = 19999;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
@@ -676,7 +706,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
+  huart2.Init.BaudRate = 9600;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
