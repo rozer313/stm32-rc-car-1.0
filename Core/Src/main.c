@@ -48,16 +48,22 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-uint16_t current_power = 450;
+uint16_t current_power = 0;
 
 uint32_t distance_cm;
-uint32_t captured_distances[5];
+uint32_t captured_distances[3];
 uint8_t number_of_measurements = 0;
 uint8_t continue_measuring = 1;
 uint8_t signal_stop = 0;
+uint32_t last_distance = 0;
+uint16_t no_same_distances = 0;
+uint8_t is_stuck = 0;
 char buffer[30];
 int size;
 uint16_t servo_angle_ms = 1500;
+
+uint8_t signal_start = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -83,8 +89,8 @@ uint32_t convert_to_cm(uint32_t distance_us)
 /* HC-SR-04 AND SERVO */
 uint32_t median_filter(uint32_t *array) {
 	uint32_t temp;
-	for (int i=0; i<4; i++) {
-		for (int j=i+1; j<5; j++) {
+	for (int i=0; i<2; i++) {
+		for (int j=i+1; j<3; j++) {
 			if (array[j] < array[i])
 			{
 				temp = array[j];
@@ -96,35 +102,7 @@ uint32_t median_filter(uint32_t *array) {
 	return array[2];
 }
 
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
-{
-	if(TIM1 == htim->Instance)
-	{
 
-		uint32_t echo_value;
-		echo_value = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-		echo_value = convert_to_cm(echo_value);
-		captured_distances[number_of_measurements++] = echo_value;
-		if (echo_value <= 20) {
-			move(220);
-		}
-			signal_stop = 1;
-		if(number_of_measurements > 4 && continue_measuring) {
-			distance_cm = median_filter(captured_distances);
-			if (distance_cm > 20)
-				signal_stop = 0;
-			number_of_measurements = 0;
-			size = sprintf(buffer, "value=%lu\n\r", distance_cm);
-			if (!signal_stop)
-				HAL_UART_Transmit(&huart2, (uint8_t*)&buffer, size, 500);
-			if (distance_cm <= 20) {
-				//continue_measuring = 0;
-				signal_stop = 1;
-				HAL_UART_Transmit(&huart2, "STOP\n\r", 6, 500);
-			}
-		}
-	}
-}
 
 void servo_scan_left() {
 	servo_angle_ms += 10;
@@ -145,7 +123,7 @@ void servo_center() {
 
 /* ENGINE CONTROL */
 
-void move(uint16_t speed) {
+void accelerate(uint16_t speed) {
 	current_power = 100;
 	while (current_power < speed) {
 		current_power += 10;
@@ -153,28 +131,28 @@ void move(uint16_t speed) {
 		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, current_power);
 		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, current_power);
 		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_4, current_power);
-		HAL_Delay(20);
+		HAL_Delay(30);
 	}
 	current_power = speed;
+}
+
+void move(uint16_t speed) {
+	//if (current_power < speed)
+	//	accelerate(speed);
+
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_1, speed);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, speed);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, speed);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_4, speed);
+	current_power = speed;
 }
 
 void stop() {
-	while (current_power > 150) {
-		current_power -= 10;
-		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_1, current_power);
-		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, current_power);
-		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, current_power);
-		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_4, current_power);
-		HAL_Delay(20);
-	}
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_1, 0);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, 0);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, 0);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_4, 0);
+	current_power = 0;
 }
 
 void turn_forward() {
@@ -224,6 +202,44 @@ void turn_right() {
 	HAL_GPIO_WritePin(R_IN3_GPIO_Port, R_IN3_Pin, 1);
 	HAL_GPIO_WritePin(R_IN4_GPIO_Port, R_IN4_Pin, 0);
 }
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if(TIM1 == htim->Instance)
+	{
+
+		uint32_t echo_value;
+		echo_value = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+		echo_value = convert_to_cm(echo_value);
+
+		captured_distances[number_of_measurements++] = echo_value;
+		if(number_of_measurements > 2 && continue_measuring) {
+			distance_cm = median_filter(captured_distances);
+			number_of_measurements = 0;
+			size = sprintf(buffer, "value=%lu\n\r", distance_cm);
+
+			if (abs(last_distance - distance_cm) <= 25 && signal_start == 1) {
+				no_same_distances++;
+				if(no_same_distances >= 10) {
+					signal_stop = 1;
+				}
+
+			}
+			else {
+				no_same_distances = 0;
+			}
+
+			HAL_UART_Transmit(&huart2, (uint8_t*)&buffer, size, 500);
+			if (distance_cm <= 30) {
+				//continue_measuring = 0;
+				signal_stop = 1;
+				stop();
+				//HAL_UART_Transmit(&huart2, "STOP\n\r", 6, 500);
+			}
+			last_distance = distance_cm;
+		}
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -266,26 +282,21 @@ int main(void)
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
   uint16_t time = 1500;
-  uint16_t power = 450;
+  uint16_t power = 300;
 
   HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1 | TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   HAL_Delay(1000);
   uint8_t check_left = 1;
-  uint8_t signal_start = 0;
   uint32_t mean_value_left = 0;
   uint32_t mean_value_right = 0;
   uint32_t last_measured_value = 0;
   uint16_t measures_while_scanning = 0;
+  uint16_t max_left_value = 0;
+  uint16_t max_right_value = 0;
   //servo_scan_left();
   __HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_2, 1500);
-  //HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-  while (1==1) {
-	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-	  HAL_Delay(1000);
-  }
-
   HAL_Delay(1000);
 
 
@@ -312,6 +323,8 @@ int main(void)
 				  if (last_measured_value != distance_cm)
 				  {
 					  last_measured_value = distance_cm;
+					  if (last_measured_value > max_left_value)
+						  max_left_value = last_measured_value;
 					  mean_value_left += distance_cm;
 					  measures_while_scanning++;
 				  }
@@ -332,6 +345,8 @@ int main(void)
 				  if (last_measured_value != distance_cm)
 				  {
 					  last_measured_value = distance_cm;
+					  if (last_measured_value > max_right_value)
+						  max_right_value = last_measured_value;
 					  mean_value_right += distance_cm;
 					  measures_while_scanning++;
 				  }
@@ -346,18 +361,26 @@ int main(void)
 		  }
 
 		  else {
+			  turn_backwards();
+			  move(300);
+			  HAL_Delay(400);
 			  if (mean_value_left > mean_value_right) {
 				  HAL_UART_Transmit(&huart2, "LEFT\n\r", 6, 500); //go left
 				  turn_left();
+				  while (distance_cm < max_left_value && distance_cm < 40) {
+					  move(450);
+				  }
 			  }
 
 			  else {
 				  HAL_UART_Transmit(&huart2, "RIGHT\n\r", 7, 500); //go right
+				  turn_right();
+				  while (distance_cm < max_right_value && distance_cm < 40) {
+					  move(450);
+				  }
 			  }
+			  stop();
 
-			  while (distance_cm > 5) {
-				  move(power);
-			  }
 			  turn_forward();
 
 			  mean_value_right = 0;
@@ -373,7 +396,10 @@ int main(void)
 
 	  else if (signal_start){
 		  turn_forward();
-		  move(power);
+		  if (distance_cm < 40 && distance_cm > 25)
+			  move(200);
+		  else
+			  move(power);
 	  }
 
 
