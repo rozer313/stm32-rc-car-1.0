@@ -48,7 +48,16 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+uint16_t current_power = 450;
 
+uint32_t distance_cm;
+uint32_t captured_distances[5];
+uint8_t number_of_measurements = 0;
+uint8_t continue_measuring = 1;
+uint8_t signal_stop = 0;
+char buffer[30];
+int size;
+uint16_t servo_angle_ms = 1500;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,7 +74,76 @@ static void MX_TIM3_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/* HC-SR-04 AND SERVO */
+uint32_t median_filter(uint32_t *array) {
+	uint32_t temp;
+	for (int i=0; i<4; i++) {
+		for (int j=i+1; j<5; j++) {
+			if (array[j] < array[i])
+			{
+				temp = array[j];
+				array[j] = array[i];
+				array[i] = temp;
+			}
+		}
+	}
+	return array[2];
+}
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if(TIM1 == htim->Instance)
+	{
+
+		uint32_t echo_value;
+		echo_value = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+		captured_distances[number_of_measurements++] = convert_to_cm(echo_value);
+		if(number_of_measurements > 4 && continue_measuring) {
+			distance_cm = median_filter(captured_distances);
+			number_of_measurements = 0;
+			size = sprintf(buffer, "value=%lu\n\r", distance_cm);
+			if (!signal_stop)
+				HAL_UART_Transmit(&huart2, (uint8_t*)&buffer, size, 500);
+			if (distance_cm <= 5) {
+				//continue_measuring = 0;
+				signal_stop = 1;
+				HAL_UART_Transmit(&huart2, "STOP\n\r", 6, 500);
+			}
+		}
+	}
+}
+
+void servo_scan_left() {
+	servo_angle_ms += 10;
+	__HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_2, servo_angle_ms);
+	HAL_Delay(20);
+}
+
+void servo_scan_right() {
+	servo_angle_ms -= 10;
+	__HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_2, servo_angle_ms);
+	HAL_Delay(20);
+}
+
+void servo_center() {
+	servo_angle_ms = 1500;
+	__HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_2, servo_angle_ms);
+}
+
+/* ENGINE CONTROL */
+
 void move(uint16_t speed) {
+	current_power = 100;
+	while (current_power < speed) {
+		current_power += 10;
+		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_1, current_power);
+		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, current_power);
+		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, current_power);
+		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_4, current_power);
+		HAL_Delay(20);
+	}
+	current_power = speed;
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_1, speed);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, speed);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, speed);
@@ -73,6 +151,14 @@ void move(uint16_t speed) {
 }
 
 void stop() {
+	while (current_power > 150) {
+		current_power -= 10;
+		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_1, current_power);
+		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, current_power);
+		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, current_power);
+		__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_4, current_power);
+		HAL_Delay(20);
+	}
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_1, 0);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_2, 0);
 	__HAL_TIM_SetCompare(&htim4, TIM_CHANNEL_3, 0);
@@ -82,16 +168,28 @@ void stop() {
 void turn_forward() {
 	HAL_GPIO_WritePin(F_IN1_GPIO_Port, F_IN1_Pin, 1);
 	HAL_GPIO_WritePin(F_IN2_GPIO_Port, F_IN2_Pin, 0);
-	HAL_GPIO_WritePin(F_IN3_GPIO_Port, F_IN3_Pin, 1);
-	HAL_GPIO_WritePin(F_IN4_GPIO_Port, F_IN4_Pin, 0);
+	HAL_GPIO_WritePin(F_IN3_GPIO_Port, F_IN3_Pin, 0);
+	HAL_GPIO_WritePin(F_IN4_GPIO_Port, F_IN4_Pin, 1);
 
 	HAL_GPIO_WritePin(R_IN1_GPIO_Port, R_IN1_Pin, 1);
 	HAL_GPIO_WritePin(R_IN2_GPIO_Port, R_IN2_Pin, 0);
+	HAL_GPIO_WritePin(R_IN3_GPIO_Port, R_IN3_Pin, 0);
+	HAL_GPIO_WritePin(R_IN4_GPIO_Port, R_IN4_Pin, 1);
+}
+
+void turn_backwards() {
+	HAL_GPIO_WritePin(F_IN1_GPIO_Port, F_IN1_Pin, 0);
+	HAL_GPIO_WritePin(F_IN2_GPIO_Port, F_IN2_Pin, 1);
+	HAL_GPIO_WritePin(F_IN3_GPIO_Port, F_IN3_Pin, 1);
+	HAL_GPIO_WritePin(F_IN4_GPIO_Port, F_IN4_Pin, 0);
+
+	HAL_GPIO_WritePin(R_IN1_GPIO_Port, R_IN1_Pin, 0);
+	HAL_GPIO_WritePin(R_IN2_GPIO_Port, R_IN2_Pin, 1);
 	HAL_GPIO_WritePin(R_IN3_GPIO_Port, R_IN3_Pin, 1);
 	HAL_GPIO_WritePin(R_IN4_GPIO_Port, R_IN4_Pin, 0);
 }
 
-void turn_backwards() {
+void turn_left() {
 	HAL_GPIO_WritePin(F_IN1_GPIO_Port, F_IN1_Pin, 0);
 	HAL_GPIO_WritePin(F_IN2_GPIO_Port, F_IN2_Pin, 1);
 	HAL_GPIO_WritePin(F_IN3_GPIO_Port, F_IN3_Pin, 0);
@@ -101,6 +199,18 @@ void turn_backwards() {
 	HAL_GPIO_WritePin(R_IN2_GPIO_Port, R_IN2_Pin, 1);
 	HAL_GPIO_WritePin(R_IN3_GPIO_Port, R_IN3_Pin, 0);
 	HAL_GPIO_WritePin(R_IN4_GPIO_Port, R_IN4_Pin, 1);
+}
+
+void turn_right() {
+	HAL_GPIO_WritePin(F_IN1_GPIO_Port, F_IN1_Pin, 1);
+	HAL_GPIO_WritePin(F_IN2_GPIO_Port, F_IN2_Pin, 0);
+	HAL_GPIO_WritePin(F_IN3_GPIO_Port, F_IN3_Pin, 1);
+	HAL_GPIO_WritePin(F_IN4_GPIO_Port, F_IN4_Pin, 0);
+
+	HAL_GPIO_WritePin(R_IN1_GPIO_Port, R_IN1_Pin, 1);
+	HAL_GPIO_WritePin(R_IN2_GPIO_Port, R_IN2_Pin, 0);
+	HAL_GPIO_WritePin(R_IN3_GPIO_Port, R_IN3_Pin, 1);
+	HAL_GPIO_WritePin(R_IN4_GPIO_Port, R_IN4_Pin, 0);
 }
 /* USER CODE END 0 */
 
@@ -143,20 +253,136 @@ int main(void)
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
+  uint16_t time = 1500;
+  uint16_t power = 450;
 
-  turn_forward();
-  move(200);
-  HAL_Delay(2500);
-  stop();
-  turn_backwards();
-  move(200);
-  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+  HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1 | TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+  HAL_Delay(1000);
+  uint8_t check_left = 1;
+  uint32_t mean_value_left = 0;
+  uint32_t mean_value_right = 0;
+  uint32_t last_measured_value = 0;
+  uint16_t measures_while_scanning = 0;
+  servo_center();
+  HAL_Delay(1000);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  if (signal_stop) {
+		  stop();
+		  if (check_left == 1) {
+			  if (servo_angle_ms < 2500) {
+				  servo_scan_left();
+				  if (last_measured_value != distance_cm)
+				  {
+					  last_measured_value = distance_cm;
+					  mean_value_left += distance_cm;
+					  measures_while_scanning++;
+				  }
+			  }
+			  else {
+				  mean_value_left = mean_value_left / measures_while_scanning;
+				  measures_while_scanning = 0;
+				  last_measured_value = 0;
+				  check_left = 0;
+				  servo_center();
+			  }
+		  }
+
+		  else if (check_left == 0) {
+
+			  if (servo_angle_ms > 500) {
+				  servo_scan_right();
+				  if (last_measured_value != distance_cm)
+				  {
+					  last_measured_value = distance_cm;
+					  mean_value_right += distance_cm;
+					  measures_while_scanning++;
+				  }
+			  }
+			  else {
+				  mean_value_right = mean_value_right / measures_while_scanning;
+				  measures_while_scanning = 0;
+				  last_measured_value = 0;
+				  check_left = 2;
+				  servo_center();
+			  }
+		  }
+
+		  else {
+			  if (mean_value_left > mean_value_right) {
+				  HAL_UART_Transmit(&huart2, "LEFT\n\r", 6, 500); //go left
+				  turn_left();
+			  }
+
+			  else {
+				  HAL_UART_Transmit(&huart2, "RIGHT\n\r", 7, 500); //go right
+			  }
+
+			  while (distance_cm > 5) {
+				  move(power);
+			  }
+			  turn_forward();
+
+			  mean_value_right = 0;
+			  mean_value_left = 0;
+			  measures_while_scanning = 0;
+			  last_measured_value = 0;
+			  check_left = 1;
+			  signal_stop = 0;
+
+		  }
+
+	  }
+
+	  else {
+		  turn_forward();
+		  move(power);
+	  }
+
+
+
+	  /*
+	  if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) {
+		  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+		  turn_forward();
+		  move(power);
+		  HAL_Delay(time);
+		  stop();
+		  turn_backwards();
+		  move(power);
+		  HAL_Delay(time);
+		  stop();
+		  turn_left();
+		  move(power);
+		  HAL_Delay(time);
+		  stop();
+		  turn_right();
+		  move(power);
+		  HAL_Delay(time);
+		  stop();
+
+		  //WYKOMENTOWAC
+		  turn_forward();
+		  move(400);
+		  HAL_Delay(2500);
+		  stop();
+		  turn_backwards();
+		  move(400);
+		  HAL_Delay(2500);
+		  stop();
+
+
+		  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+	  } */
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -495,7 +721,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
