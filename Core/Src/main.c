@@ -295,9 +295,14 @@ int main(void)
   uint16_t measures_while_scanning = 0;
   uint16_t max_left_value = 0;
   uint16_t max_right_value = 0;
+  uint16_t servo_left_max = 0;
+  uint16_t servo_right_max = 0;
   //servo_scan_left();
   __HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_2, 1500);
-  HAL_Delay(1000);
+  //turn_right();
+  //move(450);
+  HAL_Delay(1250);
+  //stop();
 
 
   HAL_UART_Transmit(&huart2, "LEFT\n\r", 6, 500); //go left
@@ -323,8 +328,10 @@ int main(void)
 				  if (last_measured_value != distance_cm)
 				  {
 					  last_measured_value = distance_cm;
-					  if (last_measured_value > max_left_value)
+					  if (last_measured_value > max_left_value) {
 						  max_left_value = last_measured_value;
+						  servo_left_max = servo_angle_ms;
+					  }
 					  mean_value_left += distance_cm;
 					  measures_while_scanning++;
 				  }
@@ -345,8 +352,10 @@ int main(void)
 				  if (last_measured_value != distance_cm)
 				  {
 					  last_measured_value = distance_cm;
-					  if (last_measured_value > max_right_value)
+					  if (last_measured_value > max_right_value) {
 						  max_right_value = last_measured_value;
+						  servo_right_max = servo_angle_ms;
+					  }
 					  mean_value_right += distance_cm;
 					  measures_while_scanning++;
 				  }
@@ -388,6 +397,10 @@ int main(void)
 			  measures_while_scanning = 0;
 			  last_measured_value = 0;
 			  check_left = 1;
+			  max_left_value = 0;
+			  max_right_value = 0;
+			  servo_left_max = 0;
+			  servo_right_max = 0;
 			  signal_stop = 0;
 
 		  }
