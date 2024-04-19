@@ -67,7 +67,7 @@ uint16_t servo_angle_ms = 1500;
 
 uint8_t signal_start = 0;
 
-char *demo_string = "test\n\r"; //demo string
+char *demo_string = "test\n\r";
 uint8_t recv_char;
 uint8_t recv_str[20];
 int i=0;
@@ -232,7 +232,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 			number_of_measurements = 0;
 			size = sprintf(buffer, "value=%lu\n\r", distance_cm);
 
-			if (abs(last_distance - distance_cm) <= 25 && signal_start == 1) {
+			if (abs(last_distance - distance_cm) <= 25 && distance_cm < 100 && signal_start == 1) {
 				no_same_distances++;
 				if(no_same_distances >= 10) {
 					signal_stop = 1;
