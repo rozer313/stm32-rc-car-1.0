@@ -21,6 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <math.h>
+#include <string.h>
 
 /* USER CODE END Includes */
 
@@ -45,6 +47,7 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 
+UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -64,6 +67,16 @@ uint16_t servo_angle_ms = 1500;
 
 uint8_t signal_start = 0;
 
+char *demo_string = "test\n\r"; //demo string
+uint8_t recv_char;
+uint8_t recv_str[20];
+int i=0;
+char *forward = "forward";
+char *backwards = "backwards";
+char *left = "left";
+char *right = "right";
+char *ble_stop = "stop";
+uint8_t ft = 76;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,6 +87,7 @@ static void MX_TIM4_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -229,8 +243,8 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 				no_same_distances = 0;
 			}
 
-			HAL_UART_Transmit(&huart2, (uint8_t*)&buffer, size, 500);
-			if (distance_cm <= 30) {
+			//HAL_UART_Transmit(&huart2, (uint8_t*)&buffer, size, 500);
+			if (distance_cm <= 30 && signal_start) {
 				//continue_measuring = 0;
 				signal_stop = 1;
 				stop();
@@ -240,6 +254,8 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 		}
 	}
 }
+
+
 /* USER CODE END 0 */
 
 /**
@@ -276,6 +292,7 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
@@ -287,6 +304,9 @@ int main(void)
   HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1 | TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+
+  HAL_UART_Receive_IT(&huart1, &recv_char, 1);
+
   HAL_Delay(1000);
   uint8_t check_left = 1;
   uint32_t mean_value_left = 0;
@@ -306,6 +326,7 @@ int main(void)
 
 
   HAL_UART_Transmit(&huart2, "LEFT\n\r", 6, 500); //go left
+  HAL_UART_Transmit(&huart1, (uint8_t*)demo_string, strlen(demo_string), HAL_MAX_DELAY);
   //servo_center();
 
   /* USER CODE END 2 */
@@ -314,6 +335,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  //HAL_UART_Transmit(&huart1, (uint8_t*)demo_string, strlen(demo_string), HAL_MAX_DELAY);
+
 	  if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) {
 		  signal_start = 1;
 		  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
@@ -372,21 +395,24 @@ int main(void)
 		  else {
 			  turn_backwards();
 			  move(300);
-			  HAL_Delay(400);
+			  HAL_Delay(150);
 			  if (mean_value_left > mean_value_right) {
 				  HAL_UART_Transmit(&huart2, "LEFT\n\r", 6, 500); //go left
 				  turn_left();
-				  while (distance_cm < max_left_value && distance_cm < 40) {
+				  do {
 					  move(450);
-				  }
+					  HAL_Delay(250);
+				  } while (distance_cm < max_right_value && distance_cm < 40);
 			  }
 
 			  else {
 				  HAL_UART_Transmit(&huart2, "RIGHT\n\r", 7, 500); //go right
 				  turn_right();
-				  while (distance_cm < max_right_value && distance_cm < 40) {
+				  do {
 					  move(450);
-				  }
+					  HAL_Delay(250);
+
+				  } while (distance_cm < max_right_value && distance_cm < 40);
 			  }
 			  stop();
 
@@ -730,6 +756,39 @@ static void MX_TIM4_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 9600;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -820,7 +879,64 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+    if(huart->Instance == USART1 ){
+        if(recv_char == '\r'){
 
+	    HAL_UART_Transmit(&huart2, recv_str, i, HAL_MAX_DELAY);
+
+	    	if(!strcmp(recv_str, forward)) {
+	    		turn_forward();
+	    		move(350);
+	    		//HAL_Delay(500);
+	    		//stop();
+	    	}
+
+	    	if(!strcmp(recv_str, backwards)) {
+	    		turn_backwards();
+	    		move(350);
+	    		//HAL_Delay(500);
+	    		//stop();
+	    	}
+
+	    	if(!strcmp(recv_str, left)) {
+	    		//sprintf(recv_str, "stop");
+	    		turn_left();
+	    		move(450);
+	    		//HAL_Delay(500);
+	    		//stop();
+	    		//sprintf(recv_str, "stop");
+	    	}
+
+	    	if(!strcmp(recv_str, right)) {
+	    		//sprintf(recv_str, "stop");
+	    		turn_right();
+	    		move(450);
+	    		//HAL_Delay(500);
+	    		//stop();
+
+	    	}
+
+	    	if(!strcmp(recv_str, ble_stop)) {
+	    		stop();
+	    		sprintf(recv_str, "stop");
+	    	}
+
+
+			memset(recv_str, 0, i);
+			i=0;
+		}
+        else {
+		    if(recv_char == '\r' || recv_char == '\n'){
+		}
+		    else{
+		    recv_str[i++] = recv_char;
+		}
+	 }
+	 HAL_UART_Receive_IT(&huart1, &recv_char, 1);
+
+    }
+}
 /* USER CODE END 4 */
 
 /**
