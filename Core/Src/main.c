@@ -319,8 +319,7 @@ int main(void)
   uint16_t servo_right_max = 0;
   //servo_scan_left();
   __HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_2, 1500);
-  //turn_right();
-  //move(450);
+
   HAL_Delay(1250);
   //stop();
 
