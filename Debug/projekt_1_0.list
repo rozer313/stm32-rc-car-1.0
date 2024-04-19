@@ -1196,8 +1196,7 @@ int main(void)
  8000a9a:	681b      	ldr	r3, [r3, #0]
  8000a9c:	f240 52dc 	movw	r2, #1500	@ 0x5dc
  8000aa0:	639a      	str	r2, [r3, #56]	@ 0x38
-  //turn_right();
-  //move(450);
+
   HAL_Delay(1250);
  8000aa2:	f240 40e2 	movw	r0, #1250	@ 0x4e2
  8000aa6:	f000 ffcb 	bl	8001a40 <HAL_Delay>
