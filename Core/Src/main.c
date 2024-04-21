@@ -181,6 +181,7 @@ void turn_forward() {
 	HAL_GPIO_WritePin(R_IN4_GPIO_Port, R_IN4_Pin, 1);
 }
 
+
 void turn_backwards() {
 	HAL_GPIO_WritePin(F_IN1_GPIO_Port, F_IN1_Pin, 0);
 	HAL_GPIO_WritePin(F_IN2_GPIO_Port, F_IN2_Pin, 1);
@@ -216,7 +217,7 @@ void turn_right() {
 	HAL_GPIO_WritePin(R_IN3_GPIO_Port, R_IN3_Pin, 1);
 	HAL_GPIO_WritePin(R_IN4_GPIO_Port, R_IN4_Pin, 0);
 }
-
+/*TIMER INTERRUPT*/
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
 	if(TIM1 == htim->Instance)
@@ -243,18 +244,62 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 				no_same_distances = 0;
 			}
 
-			//HAL_UART_Transmit(&huart2, (uint8_t*)&buffer, size, 500);
+			HAL_UART_Transmit(&huart2, (uint8_t*)&buffer, size, 500);
 			if (distance_cm <= 30 && signal_start) {
-				//continue_measuring = 0;
 				signal_stop = 1;
 				stop();
-				//HAL_UART_Transmit(&huart2, "STOP\n\r", 6, 500);
 			}
 			last_distance = distance_cm;
 		}
 	}
 }
 
+/*BLUETOOTH INTERRUPT*/
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+    if(huart->Instance == USART1 ){
+        if(recv_char == '\r'){
+
+	    HAL_UART_Transmit(&huart2, recv_str, i, HAL_MAX_DELAY);
+
+	    	if(!strcmp(recv_str, forward)) {
+	    		turn_forward();
+	    		move(475);
+	    	}
+
+	    	if(!strcmp(recv_str, backwards)) {
+	    		turn_backwards();
+	    		move(475);
+	    	}
+
+	    	if(!strcmp(recv_str, left)) {
+	    		turn_left();
+	    		move(450);
+	    	}
+
+	    	if(!strcmp(recv_str, right)) {
+	    		turn_right();
+	    		move(450);
+	    	}
+
+	    	if(!strcmp(recv_str, ble_stop)) {
+	    		stop();
+	    		sprintf(recv_str, "stop");
+	    	}
+
+
+			memset(recv_str, 0, i);
+			i=0;
+		}
+        else {
+		    if(recv_char != '\r' && recv_char != '\n'){
+			    recv_str[i++] = recv_char;
+		}
+	 }
+	 HAL_UART_Receive_IT(&huart1, &recv_char, 1);
+
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -317,16 +362,12 @@ int main(void)
   uint16_t max_right_value = 0;
   uint16_t servo_left_max = 0;
   uint16_t servo_right_max = 0;
-  //servo_scan_left();
+
   __HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_2, 1500);
 
   HAL_Delay(1250);
-  //stop();
 
-
-  HAL_UART_Transmit(&huart2, "LEFT\n\r", 6, 500); //go left
   HAL_UART_Transmit(&huart1, (uint8_t*)demo_string, strlen(demo_string), HAL_MAX_DELAY);
-  //servo_center();
 
   /* USER CODE END 2 */
 
@@ -334,8 +375,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  //HAL_UART_Transmit(&huart1, (uint8_t*)demo_string, strlen(demo_string), HAL_MAX_DELAY);
-
 	  if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) {
 		  signal_start = 1;
 		  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
@@ -396,7 +435,6 @@ int main(void)
 			  move(300);
 			  HAL_Delay(150);
 			  if (mean_value_left > mean_value_right) {
-				  HAL_UART_Transmit(&huart2, "LEFT\n\r", 6, 500); //go left
 				  turn_left();
 				  do {
 					  move(450);
@@ -405,7 +443,7 @@ int main(void)
 			  }
 
 			  else {
-				  HAL_UART_Transmit(&huart2, "RIGHT\n\r", 7, 500); //go right
+				  HAL_UART_Transmit(&huart2, "RIGHT\n\r", 7, 500);
 				  turn_right();
 				  do {
 					  move(450);
@@ -439,43 +477,6 @@ int main(void)
 		  else
 			  move(power);
 	  }
-
-
-
-	  /*
-	  if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) {
-		  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-		  turn_forward();
-		  move(power);
-		  HAL_Delay(time);
-		  stop();
-		  turn_backwards();
-		  move(power);
-		  HAL_Delay(time);
-		  stop();
-		  turn_left();
-		  move(power);
-		  HAL_Delay(time);
-		  stop();
-		  turn_right();
-		  move(power);
-		  HAL_Delay(time);
-		  stop();
-
-		  //WYKOMENTOWAC
-		  turn_forward();
-		  move(400);
-		  HAL_Delay(2500);
-		  stop();
-		  turn_backwards();
-		  move(400);
-		  HAL_Delay(2500);
-		  stop();
-
-
-		  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-	  } */
-
 
     /* USER CODE END WHILE */
 
@@ -878,64 +879,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
-    if(huart->Instance == USART1 ){
-        if(recv_char == '\r'){
 
-	    HAL_UART_Transmit(&huart2, recv_str, i, HAL_MAX_DELAY);
-
-	    	if(!strcmp(recv_str, forward)) {
-	    		turn_forward();
-	    		move(350);
-	    		//HAL_Delay(500);
-	    		//stop();
-	    	}
-
-	    	if(!strcmp(recv_str, backwards)) {
-	    		turn_backwards();
-	    		move(350);
-	    		//HAL_Delay(500);
-	    		//stop();
-	    	}
-
-	    	if(!strcmp(recv_str, left)) {
-	    		//sprintf(recv_str, "stop");
-	    		turn_left();
-	    		move(450);
-	    		//HAL_Delay(500);
-	    		//stop();
-	    		//sprintf(recv_str, "stop");
-	    	}
-
-	    	if(!strcmp(recv_str, right)) {
-	    		//sprintf(recv_str, "stop");
-	    		turn_right();
-	    		move(450);
-	    		//HAL_Delay(500);
-	    		//stop();
-
-	    	}
-
-	    	if(!strcmp(recv_str, ble_stop)) {
-	    		stop();
-	    		sprintf(recv_str, "stop");
-	    	}
-
-
-			memset(recv_str, 0, i);
-			i=0;
-		}
-        else {
-		    if(recv_char == '\r' || recv_char == '\n'){
-		}
-		    else{
-		    recv_str[i++] = recv_char;
-		}
-	 }
-	 HAL_UART_Receive_IT(&huart1, &recv_char, 1);
-
-    }
-}
 /* USER CODE END 4 */
 
 /**
