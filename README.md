@@ -17,4 +17,6 @@ The RC car, can be controlled by sending steering commands through app enabling 
 <li>Bluetooth module (in this example Bluetooth 4.0 Low Energy Module).</li>
 </ul>
 <br><br>
-![rc-car](rc-car.jpg)
+<hr>
+<br><br>
+<img src="rc-car.jpg" height="450px">
