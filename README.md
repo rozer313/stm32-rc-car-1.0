@@ -16,3 +16,6 @@ The RC car, can be controlled by sending steering commands through app enabling 
 <li>Servo (in this example SG90) for moving attached on it sensor.</li>
 <li>Bluetooth module (in this example Bluetooth 4.0 Low Energy Module).</li>
 </ul>
+<br><br>
+<hr>
+![rc-car](https://github.com/user-attachments/assets/2bd2126c-1575-42b4-a388-27e8e6042f4d)
